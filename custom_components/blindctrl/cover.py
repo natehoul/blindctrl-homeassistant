@@ -14,7 +14,14 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import BLIND_MAX_POSITION, DOMAIN
+from .const import (
+    BLIND_MAX_POSITION,
+    BLIND_OPEN_POSITION,
+    CLOSE_DOWN,
+    CLOSE_UP,
+    CONF_CLOSE_DIRECTION,
+    DOMAIN,
+)
 from .coordinator import BlindCtrlCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,16 +35,29 @@ async def async_setup_entry(
     """Set up BlindCtrl covers from a config entry."""
     coordinator: BlindCtrlCoordinator = hass.data[DOMAIN][entry.entry_id]
 
+    close_direction = entry.data.get(CONF_CLOSE_DIRECTION, CLOSE_UP)
+
     entities = []
     for blind in coordinator.data:
         if blind.get("isIdentified", False):
-            entities.append(BlindCtrlCover(coordinator, blind))
+            entities.append(BlindCtrlCover(coordinator, blind, close_direction))
 
     async_add_entities(entities, True)
 
 
 class BlindCtrlCover(CoordinatorEntity, CoverEntity):
-    """Representation of a BlindCtrl blind as a cover entity."""
+    """Representation of a BlindCtrl blind as a cover entity.
+
+    Position mapping:
+      - Blind 0   = down
+      - Blind 100 = open
+      - Blind 200 = up
+
+    The "Close" button sends the blind to 0 (down) or 200 (up)
+    depending on the configured close_direction.
+    The "Open" button always sends the blind to 100.
+    The slider covers the full 0-200 range (mapped as HA 0-100%).
+    """
 
     _attr_device_class = CoverDeviceClass.BLIND
     _attr_supported_features = (
@@ -49,10 +69,14 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
     _attr_has_entity_name = True
 
     def __init__(
-        self, coordinator: BlindCtrlCoordinator, blind_data: dict
+        self,
+        coordinator: BlindCtrlCoordinator,
+        blind_data: dict,
+        close_direction: str,
     ) -> None:
         super().__init__(coordinator)
         self._blind_id: int = blind_data["id"]
+        self._close_direction = close_direction
         self._attr_unique_id = f"blindctrl_{blind_data['macAddress']}"
         self._attr_name = blind_data.get("name", f"Blind {self._blind_id}")
 
@@ -65,6 +89,10 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
         }
         if blind_data.get("room"):
             self._attr_device_info["suggested_area"] = blind_data["room"]
+
+    @property
+    def _close_position(self) -> int:
+        return BLIND_MAX_POSITION if self._close_direction == CLOSE_UP else 0
 
     @property
     def _blind_data(self) -> dict | None:
@@ -91,22 +119,36 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
 
     @property
     def is_closed(self) -> bool | None:
-        pos = self.current_cover_position
-        if pos is None:
+        data = self._blind_data
+        if data is None:
             return None
-        return pos == 0
+        raw_position = data.get("position", 0)
+        return raw_position == self._close_position
+
+    @property
+    def is_open(self) -> bool | None:
+        data = self._blind_data
+        if data is None:
+            return None
+        raw_position = data.get("position", 0)
+        return raw_position == BLIND_OPEN_POSITION
 
     async def async_open_cover(self, **kwargs: Any) -> None:
+        """Open the blind (move to position 100)."""
         await self.coordinator.api.async_set_position(
-            self._blind_id, BLIND_MAX_POSITION
+            self._blind_id, BLIND_OPEN_POSITION
         )
         await self.coordinator.async_request_refresh()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
-        await self.coordinator.api.async_set_position(self._blind_id, 0)
+        """Close the blind (move to configured close direction)."""
+        await self.coordinator.api.async_set_position(
+            self._blind_id, self._close_position
+        )
         await self.coordinator.async_request_refresh()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Set blind position. HA 0-100% maps to blind 0-200."""
         ha_position = kwargs.get("position", 0)
         raw_position = round((ha_position / 100) * BLIND_MAX_POSITION)
         await self.coordinator.api.async_set_position(self._blind_id, raw_position)

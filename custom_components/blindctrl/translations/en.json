@@ -6,7 +6,8 @@
         "description": "Enter the IP address and port of your Raspberry Pi running BlindCtrl.",
         "data": {
           "host": "Host (IP address)",
-          "port": "Port"
+          "port": "Port",
+          "close_direction": "Close direction"
         }
       }
     },
@@ -15,6 +16,16 @@
     },
     "abort": {
       "already_configured": "This BlindCtrl hub is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BlindCtrl Options",
+        "data": {
+          "close_direction": "Close direction"
+        }
+      }
     }
   }
 }
