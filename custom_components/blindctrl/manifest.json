@@ -1,0 +1,11 @@
+{
+  "domain": "blindctrl",
+  "name": "BlindCtrl",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/your-username/ha-blindctrl",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "version": "1.0.0",
+  "requirements": ["aiohttp>=3.8.0"]
+}

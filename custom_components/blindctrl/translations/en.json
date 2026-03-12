@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to BlindCtrl Hub",
+        "description": "Enter the IP address and port of your Raspberry Pi running BlindCtrl.",
+        "data": {
+          "host": "Host (IP address)",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to BlindCtrl hub. Check the IP address and port."
+    },
+    "abort": {
+      "already_configured": "This BlindCtrl hub is already configured."
+    }
+  }
+}
