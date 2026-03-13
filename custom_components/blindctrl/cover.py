@@ -118,20 +118,16 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
         return round((raw_position / BLIND_MAX_POSITION) * 100)
 
     @property
-    def is_closed(self) -> bool | None:
-        data = self._blind_data
-        if data is None:
-            return None
-        raw_position = data.get("position", 0)
-        return raw_position == self._close_position
+    def is_closed(self) -> bool:
+        return False
 
     @property
-    def is_open(self) -> bool | None:
-        data = self._blind_data
-        if data is None:
-            return None
-        raw_position = data.get("position", 0)
-        return raw_position == BLIND_OPEN_POSITION
+    def is_opening(self) -> bool:
+        return False
+
+    @property
+    def is_closing(self) -> bool:
+        return False
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the blind (move to position 100)."""
