@@ -43,14 +43,20 @@ async def async_setup_entry(
 
 
 class BlindCtrlCover(CoordinatorEntity, CoverEntity):
-    """Cover entity for BlindCtrl.
+    """Cover entity for a BlindCtrl blind.
 
-    Provides a position slider (HA 0-100% mapped to blind 0-200)
-    and open/close buttons. The close_direction config determines
-    whether Close sends the blind to 0 (down) or 200 (up).
+    The blind has three positions: 0 (down), 100 (open), 200 (up).
+    HA covers expect 0% = closed and 100% = fully open, and grey
+    out the Close button at 0% and the Open button at 100%.
 
-    Separate button entities (Down / Open / Up) are also created
-    for direct three-button control without HA's greying logic.
+    To keep both buttons always active, we clamp the reported HA
+    position to 1-99%. The actual state label (Open/Closed) is
+    driven by is_closed, which checks the real blind position
+    against the configured close direction.
+
+    Open button  -> blind 100 (open)
+    Close button -> blind 0 (down) or 200 (up) per close_direction
+    Slider       -> full 0-200 range via set_position
     """
 
     _attr_device_class = CoverDeviceClass.BLIND
@@ -114,7 +120,12 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
         data = self._blind_data
         if data is None:
             return None
-        return round((self._raw_position / BLIND_MAX_POSITION) * 100)
+        ha_pos = round((self._raw_position / BLIND_MAX_POSITION) * 100)
+        if ha_pos <= 0:
+            return 1
+        if ha_pos >= 100:
+            return 99
+        return ha_pos
 
     @property
     def is_closed(self) -> bool | None:
