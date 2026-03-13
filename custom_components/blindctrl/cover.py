@@ -48,15 +48,21 @@ async def async_setup_entry(
 class BlindCtrlCover(CoordinatorEntity, CoverEntity):
     """Representation of a BlindCtrl blind as a cover entity.
 
-    Position mapping:
-      - Blind 0   = down
-      - Blind 100 = open
-      - Blind 200 = up
+    Blind has 3 positions: 0 (down), 100 (open), 200 (up).
 
-    The "Close" button sends the blind to 0 (down) or 200 (up)
-    depending on the configured close_direction.
-    The "Open" button always sends the blind to 100.
-    The slider covers the full 0-200 range (mapped as HA 0-100%).
+    HA position mapping depends on close_direction config:
+
+    close_direction = "up" (default):
+      - HA 0%   = blind 200 (closed/up)
+      - HA 100% = blind 0   (fully down)
+      - Open button  → blind 100
+      - Close button → blind 200
+
+    close_direction = "down":
+      - HA 0%   = blind 0   (closed/down)
+      - HA 100% = blind 200 (fully up)
+      - Open button  → blind 100
+      - Close button → blind 0
     """
 
     _attr_device_class = CoverDeviceClass.BLIND
@@ -64,7 +70,6 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
         CoverEntityFeature.OPEN
         | CoverEntityFeature.CLOSE
         | CoverEntityFeature.SET_POSITION
-        | CoverEntityFeature.STOP
     )
     _attr_has_entity_name = True
 
@@ -102,6 +107,23 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
                     return blind
         return None
 
+    def _raw_to_ha(self, raw_position: int) -> int:
+        """Convert blind position (0-200) to HA position (0-100).
+
+        HA expects 0 = closed, 100 = open.
+        When close_direction is "up": blind 200 is closed, so invert.
+        When close_direction is "down": blind 0 is closed, so direct map.
+        """
+        if self._close_direction == CLOSE_UP:
+            return round(((BLIND_MAX_POSITION - raw_position) / BLIND_MAX_POSITION) * 100)
+        return round((raw_position / BLIND_MAX_POSITION) * 100)
+
+    def _ha_to_raw(self, ha_position: int) -> int:
+        """Convert HA position (0-100) to blind position (0-200)."""
+        if self._close_direction == CLOSE_UP:
+            return round(BLIND_MAX_POSITION - (ha_position / 100) * BLIND_MAX_POSITION)
+        return round((ha_position / 100) * BLIND_MAX_POSITION)
+
     @property
     def available(self) -> bool:
         data = self._blind_data
@@ -115,19 +137,15 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
         if data is None:
             return None
         raw_position = data.get("position", 0)
-        return round((raw_position / BLIND_MAX_POSITION) * 100)
+        return self._raw_to_ha(raw_position)
 
     @property
-    def is_closed(self) -> bool:
-        return False
-
-    @property
-    def is_opening(self) -> bool:
-        return False
-
-    @property
-    def is_closing(self) -> bool:
-        return False
+    def is_closed(self) -> bool | None:
+        data = self._blind_data
+        if data is None:
+            return None
+        raw_position = data.get("position", 0)
+        return raw_position == self._close_position
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the blind (move to position 100)."""
@@ -144,11 +162,8 @@ class BlindCtrlCover(CoordinatorEntity, CoverEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
-        """Set blind position. HA 0-100% maps to blind 0-200."""
+        """Set blind position. Converts HA 0-100% to blind 0-200."""
         ha_position = kwargs.get("position", 0)
-        raw_position = round((ha_position / 100) * BLIND_MAX_POSITION)
+        raw_position = self._ha_to_raw(ha_position)
         await self.coordinator.api.async_set_position(self._blind_id, raw_position)
         await self.coordinator.async_request_refresh()
-
-    async def async_stop_cover(self, **kwargs: Any) -> None:
-        pass
